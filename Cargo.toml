@@ -1,5 +1,5 @@
 [package]
-name = "test2"
+name = "esp32-a2dp-player"
 version = "0.1.0"
 authors = ["Erland Lewin <erland@lewin.nu>"]
 edition = "2021"
@@ -16,8 +16,6 @@ opt-level = "z"
 pio = ["esp-idf-sys/pio"]
 
 [dependencies]
-# esp-idf-sys = { version = "0.31.11", features = ["binstart"] }
-# esp-idf-sys = { version = "0.32", features = ["binstart"] }
 esp-idf-sys = { git = "https://github.com/pilotniq/esp-idf-sys", branch = "bluedroid-a2dp", features = [
     "binstart",
 ] }
@@ -34,6 +32,10 @@ log = "0.4"
 num-traits = "0.2"
 num-derive = "0.3"
 futures-locks = "0.7"
+# lewton = { git = "https://github.com/pilotniq/lewton", branch = "reduce-memory" }
+lewton = "0.10"
+sysinfo = "0.28"
+# tremor = { git = "https://github.com/plietar/rust-tremor", branch = "master" }
 
 [build-dependencies]
 embuild = "0.31"

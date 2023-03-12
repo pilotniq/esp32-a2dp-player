@@ -1,10 +1,9 @@
 // #![feature(async_fn_in_trait)]
 #![feature(stmt_expr_attributes)]
 use anyhow::Result;
-use bluetooth_hal::Stream;
-use core::time;
 use futures::executor::block_on;
-use std::{fs::File, io::Read};
+use std::time;
+use sysinfo::{RefreshKind, System, SystemExt};
 // use esp_idf_hal::prelude::*;
 use esp_idf_sys as _;
 
@@ -15,6 +14,7 @@ use crate::{
 }; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
    // use log::info;
 
+mod audio;
 mod bluetooth_esp32;
 mod bluetooth_esp32_a2dp;
 mod bluetooth_gap_esp32;
@@ -32,59 +32,15 @@ const PIN_SDCARD_MISO: i32 = 19;
 
 const ONE_SECOND: time::Duration = time::Duration::from_millis(1000);
 
-struct FileStream {
-    file: File,
+fn print_memory(system: &mut System) {
+    system.refresh_system();
+    log::info!(
+        "RAM: total={}, available={}, free={}",
+        system.total_memory(),
+        system.available_memory(),
+        system.free_memory()
+    );
 }
-
-impl Stream<i16> for FileStream {
-    fn read(&mut self, buf: &mut [i16]) -> Result<usize> {
-        // Todo: What happens with endianness here? Got it from https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=94c22f162a45e25652fa1f0ba9404078
-
-        let buffer_view_u8 =
-            unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, buf.len() * 2) };
-
-        let bytes_read = self
-            .file
-            .read(buffer_view_u8)
-            .map_err(anyhow::Error::from)?;
-        Ok(bytes_read / 2)
-    }
-}
-
-impl FileStream {
-    pub fn new(filename: &str) -> Result<Self> {
-        Ok(FileStream {
-            file: File::open(filename)?,
-        })
-    }
-}
-
-async fn playback_task<'a>(
-    /*_state: Arc<Mutex<Cell<bool>>>, */ bluetooth: &mut dyn Bluetooth<'a>,
-) -> Result<()> {
-    log::info!("Initializing SD card");
-    /* if let Err(err) = */
-    sd_card::init(
-        PIN_SDCARD_CS,
-        PIN_SDCARD_SCLK,
-        PIN_SDCARD_MISO,
-        PIN_SDCARD_MOSI,
-    )?;
-
-    // Open audio file
-    let file_stream = FileStream::new("/sdcard/SUN.RAW")?;
-
-    // let bluetoothR = bt_mutex.lock();
-    // let bluetooth = &(bluetoothR?);
-    bluetooth.a2dp_play(Box::new(file_stream)).await
-    // drop(bluetooth);
-
-    // block_on(future);
-    // std::thread::sleep(ONE_MINUTE);
-
-    // Ok(())
-}
-
 fn main() -> Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
@@ -92,19 +48,30 @@ fn main() -> Result<()> {
     let mut esp32 = esp32::Esp32::new();
     esp32.init();
 
-    log::info!("ESP Initialized");
+    // let kind = ;
+    let kind2 = RefreshKind::new().with_memory();
+    let mut system = System::new_with_specifics(kind2);
 
+    print_memory(&mut system);
+
+    log::info!("Initializing SD card");
+    sd_card::init(
+        PIN_SDCARD_CS,
+        PIN_SDCARD_SCLK,
+        PIN_SDCARD_MISO,
+        PIN_SDCARD_MOSI,
+    )?;
+
+    // let mut wifi = WifiDriver::new()
     let mut bluetooth = ESP32Bluetooth::new(&mut esp32, true, true);
-    // let bluetooth = bluetooth_mutex.lock();
-    // bluetooth.configure(&mut esp32, true, true);
 
-    // let mut bluetooth = ESP32Bluetooth::new(&mut esp32, true, true);
-
-    log::info!("Bluetooth created");
+    log::info!("Bluetooth created 1");
+    print_memory(&mut system);
 
     bluetooth.init("Piccolo")?;
 
     log::info!("Starting scanning");
+    print_memory(&mut system);
     /*
        let pair = Arc::new((Mutex::new(vec![]), Condvar::new()));
        let pair2 = Arc::clone(&pair);
@@ -117,12 +84,13 @@ fn main() -> Result<()> {
     let mut device = None;
 
     while !found && result.state == AsyncCallState::InProgress {
-        // log::info!("Waiting for discovery");
+        log::info!("Waiting for discovery");
         result = discovery.condvar.wait(result).unwrap();
-        // log::info!("Got discovery");
+        log::info!("Got discovery");
         if let Some(list) = &mut result.result {
             device = list.pop()
         }
+        log::info!("Device is {:?}", device);
         // device = result.result.unwrap().pop();
         // let d2 = device.take().unwrap();
 
@@ -145,45 +113,22 @@ fn main() -> Result<()> {
             log::info!("Device is {}", &dev.name.unwrap());
             log::info!("Cancelling discovery");
             block_on(bluetooth.gap_cancel_discovery())?;
+            print_memory(&mut system);
 
             log::info!("Discovery cancelled, connecting...");
             block_on(bluetooth.a2dp_connect(&dev.address))?;
 
             log::info!("Connected!");
+            print_memory(&mut system);
+
+            block_on(audio::playback_task(&mut bluetooth))?;
 
             // Ok(())
             // };
         }
-        None => log::info!("Bluetooth search timd out"),
+        None => log::info!("Bluetooth search timed out"),
     };
-    /*
-    &|scanned_device| {
-        if scanned_device.has_16bit_uuid(Bluetooth16bitUUIDEnum::AdvancedAudioDistribution as u16) {
-            let (lock, cvar) = &*pair2;
-            let mut found = lock.lock().unwrap();
-            *found = Some(scanned_device);
-            cvar.notify_one();
 
-            log::info!(
-                "Found A2DP Bluetooth device",
-                // &scanned_device.name.unwrap()
-            );
-            // bluetooth.gap_cancel_discovery();
-        } else {
-            log::info!("Discovered device {:?}", &scanned_device); // bdaddr_to_string(addr)
-                                                                   /*
-                                                                   for property in properties {
-                                                                       log::info!("Property: {:?}", property);
-                                                                   }
-                                                                       */
-        }
-    })?;
-    */
-    log::info!("Started scanning");
-    // let peripherals = Peripherals::take().unwrap();
-    // let state = Arc::new(Mutex::new(Cell::new(false)));
-
-    block_on(playback_task(&mut bluetooth))?;
     /*
     drop(bluetooth);
 

@@ -7,7 +7,9 @@
 use anyhow::anyhow;
 use esp_idf_sys::{
     esp, esp_bt_gap_cb_event_t, esp_bt_gap_cb_event_t_ESP_BT_GAP_ACL_CONN_CMPL_STAT_EVT,
-    esp_bt_gap_cb_event_t_ESP_BT_GAP_AUTH_CMPL_EVT, esp_bt_gap_cb_event_t_ESP_BT_GAP_DISC_RES_EVT,
+    esp_bt_gap_cb_event_t_ESP_BT_GAP_AUTH_CMPL_EVT,
+    esp_bt_gap_cb_event_t_ESP_BT_GAP_CONFIG_EIR_DATA_EVT,
+    esp_bt_gap_cb_event_t_ESP_BT_GAP_DISC_RES_EVT,
     esp_bt_gap_cb_event_t_ESP_BT_GAP_DISC_STATE_CHANGED_EVT,
     esp_bt_gap_cb_event_t_ESP_BT_GAP_MODE_CHG_EVT, esp_bt_gap_cb_event_t_ESP_BT_GAP_PIN_REQ_EVT,
     esp_bt_gap_cb_event_t_ESP_BT_GAP_RMT_SRVCS_EVT,
@@ -187,6 +189,9 @@ pub extern "C" fn bt_app_gap_cb(event: esp_bt_gap_cb_event_t, param: *mut esp_bt
         esp_bt_gap_cb_event_t_ESP_BT_GAP_MODE_CHG_EVT => unsafe {
             log::info!("ESP_BT_GAP_MODE_CHG_EVT mode: {}", (*param).mode_chg.mode);
         },
+        esp_bt_gap_cb_event_t_ESP_BT_GAP_CONFIG_EIR_DATA_EVT => {
+            log::info!("GAP event CONFIG_EIR_DATA_EVT");
+        }
         _ => log::info!("GAP event {}", event),
     }
 }
