@@ -19,4 +19,4 @@ esac
 
 export ESP_ARCH=xtensa-esp32-espidf
 
-web-flash --chip esp32 target/${ESP_ARCH}/${BUILD_MODE}/test2
+web-flash --chip esp32 target/${ESP_ARCH}/${BUILD_MODE}/esp32-a2dp-player
