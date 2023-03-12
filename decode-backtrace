@@ -1,0 +1,2 @@
+#!/bin/sh
+exec xtensa-esp32-elf-addr2line -pfiaC -e target/xtensa-esp32-espidf/debug/esp32-a2dp-player "$@"
