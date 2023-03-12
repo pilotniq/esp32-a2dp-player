@@ -1,4 +1,8 @@
 # Rust often needs a bit of an extra main task stack size compared to C (the default is 3K)
+# overflows with 7000, 14000 (Stack overflow in lewton HuffTree construction). 28000 works. 
+# Actual requirement is between 14000 and 28000, may depend on ogg file?
+# Changed back to 7000 after decoding was moved to another thread
+#CONFIG_ESP_MAIN_TASK_STACK_SIZE=28000
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=7000
 
 # Use this to set FreeRTOS kernel tick frequency to 1000 Hz (100 Hz by default).
@@ -9,14 +13,44 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=7000
 #CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=n
 #CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=n
 
+
 # Bluetooth
 CONFIG_A2DP_SRC_ENABLE=y
+
 CONFIG_BT_ENABLED=y
 CONFIG_BT_BLUEDROID_ENABLED=y
 CONFIG_BT_CLASSIC_ENABLED=y
 CONFIG_BT_SPP_ENABLED=n
 CONFIG_BT_A2DP_ENABLE=y
 CONFIG_BT_BLE_ENABLED=y
+# Stack overflow with default which is 3072?
+CONFIG_BT_BTC_TASK_STACK_SIZE=6144
 CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
 CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y
 CONFIG_BTDM_CTRL_MODE_BTDM=y
+
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+CONFIG_SPIRAM=y
+CONFIG_ESP32_SPIRAM_SUPPORT=y
+CONFIG_SPIRAM_BOOT_INIT=y
+# n will cause panic on boot if RAM not found
+# default for below is n
+CONFIG_SPIRAM_IGNORE_NOTFOUND=n
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_SPIRAM_SIZE=-1
+CONFIG_SPIRAM_SPEED_40M=y
+# Runs a rudimentary memory test on initialization. 
+# Aborts when memory test fails.
+# Disable this for slightly faster startup.
+CONFIG_SPIRAM_MEMTEST=y
+# CONFIG_SPIRAM_CACHE_WORKAROUND is not required for revision 3 or higher of the ESP32.
+# Our Lolin D32 Pro boards are chip revision 1.
+CONFIG_SPIRAM_CACHE_WORKAROUND=y
+#CONFIG_SPIRAM_BANKSWITCH_ENABLE=y
+#CONFIG_SPIRAM_BANKSWITCH_RESERVE=4
+
+ESP32_DEFAULT_CPU_FREQ_MHZ=240
+CONFIG_ESP32_DEFAULT_CPU_FREQ_240=y
