@@ -32,10 +32,9 @@ log = "0.4"
 num-traits = "0.2"
 num-derive = "0.3"
 futures-locks = "0.7"
-# lewton = { git = "https://github.com/pilotniq/lewton", branch = "reduce-memory" }
-lewton = "0.10"
 sysinfo = "0.28"
-# tremor = { git = "https://github.com/plietar/rust-tremor", branch = "master" }
+# librespot-tremor = "0.2"
+librespot-tremor = { git = "https://github.com/pilotniq/librespot-tremor", branch = "xtensa-cross-compile" }
 
 [build-dependencies]
 embuild = "0.31"
