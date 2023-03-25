@@ -1,11 +1,12 @@
-use crate::bluetooth_gap_hal::ScannedDevice;
 use anyhow::Result;
 use async_trait::async_trait;
+
+use crate::bluetooth_gap_hal::ScannedDevice;
 
 pub type BDAddr = [u8; 6];
 
 #[async_trait]
-pub trait Bluetooth<'a> {
+pub trait Bluetooth<'a>: Send {
     fn init(&mut self, device_name: &str) -> Result<()>;
     fn deinit(&mut self) -> Result<()>;
 

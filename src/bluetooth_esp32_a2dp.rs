@@ -45,7 +45,6 @@ impl Default for ConnectionState {
 
 struct PlayState {
     stream: Option<Box<dyn Stream<i16>>>,
-    // src_ready_call: AsyncCall<Result<()>>,
 }
 
 lazy_static! {
@@ -88,7 +87,6 @@ impl ESP32A2DP {
         unsafe {
             esp!(esp_a2d_source_connect(addr3.as_ptr() as *mut u8))?;
         };
-
         loop {
             log::info!("connect: waiting for event");
             listener.await;
