@@ -9,7 +9,6 @@ use std::{
     io::Read,
     sync::{Arc, Condvar, Mutex},
     thread::{self, JoinHandle},
-    time::Instant,
 };
 struct FileStream {
     file: File,
@@ -80,12 +79,10 @@ impl OggBluetoothStream {
         let mut decoder = librespot_tremor::Decoder::new(file)?;
         let packets = decoder.packets();
 
-        let mut end_of_stream = false;
-
         for packet_result in packets {
             let mut packet = match packet_result {
                 Ok(packet) => packet,
-                Err(e) => return Err(anyhow::anyhow!("Vorbis error")),
+                Err(e) => return Err(anyhow::anyhow!("Vorbis error {}", e)),
             };
             let mut buffer = buffer_mutex.lock().expect("Failed to lock"); // not sure why ? doesn't work here
 
@@ -95,8 +92,7 @@ impl OggBluetoothStream {
 
             drop(buffer); // = Release lock
 
-            end_of_stream =
-                OggBluetoothStream::buffer_packet(&mut packet, &buffer_mutex, &condvar, eos_mutex)?;
+            OggBluetoothStream::buffer_packet(&mut packet, &buffer_mutex, &condvar, eos_mutex)?;
         }
         Ok(())
     }
@@ -107,18 +103,16 @@ impl OggBluetoothStream {
         packet: &mut librespot_tremor::Packet,
         buffer_mutex: &Mutex<VecDeque<i16>>,
         condvar: &Arc<Condvar>,
-        eos_mutex: &Mutex<bool>,
+        _eos_mutex: &Mutex<bool>,
     ) -> Result<bool> {
         // Performance:
         // Packets are 2048 samples = 1024 frames. Representing 1024 / 44100 seconds = ca 23 ms of audio
         let mut buffer = buffer_mutex.lock().expect("xyzyz");
-        let t3 = Instant::now();
         // this seems very inefficient, but optmize later
         for sample in &packet.data {
             buffer.push_back(*sample);
         }
         condvar.notify_all();
-        let len = buffer.len();
         drop(buffer);
 
         Ok(false)
@@ -132,8 +126,6 @@ impl Stream<i16> for OggBluetoothStream {
         let mut copy_count = 0;
 
         while copy_count < buf.len() {
-            let t0 = Instant::now();
-
             let mut end_of_stream = *self.end_of_file.lock().expect("Failed to lock eos");
             let mut buffer = self.buffer.lock().expect("Failed to lock");
 
@@ -150,7 +142,6 @@ impl Stream<i16> for OggBluetoothStream {
             assert!(copy_len > 0);
 
             let samples: Vec<i16> = buffer.drain(..copy_len).collect();
-            let len = buffer.len();
             drop(buffer);
 
             buf[copy_count..(copy_count + copy_len)].clone_from_slice(&samples);

@@ -50,6 +50,7 @@ pub enum MajorClass {
     Uncategorized = 0x1f,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct ClassOfDevice {
     pub value: u32,
 }
@@ -65,7 +66,7 @@ impl ClassOfDevice {
         match opt_class {
             Some(mc) => Ok(mc),
             // None => Err(std::error::Error::new((format!("Invalid major {}", value)))),
-            None => Err(anyhow::anyhow!(format!("Invalid major {}", value))),
+            None => Err(anyhow::anyhow!(format!("Invalid major {value}"))),
         }
     }
 
@@ -96,17 +97,17 @@ impl ClassOfDevice {
                 // Phone
                 match minor {
                     1 => "Cellular".to_string(),
-                    _ => format!("Phone major, minor {} NIY", minor),
+                    _ => format!("Phone major, minor {minor} NIY"),
                 }
             }
             4 => {
                 // Audio/Video
                 match minor {
                     1 => "Wearable Headset Device".to_string(),
-                    _ => format!("Audio major, minor {} NIY", minor),
+                    _ => format!("Audio major, minor {minor} NIY"),
                 }
             }
-            _ => format!("Unimplemented major {}", major),
+            _ => format!("Unimplemented major {major}"),
         }
         /*        match class {
                    0 => "Uncategorized",
@@ -152,8 +153,8 @@ impl Display for ClassOfDevice {
         let major = self.get_major_device_class();
         write!(
             f,
-            "Major: {:?}",
-            major // ClassOfDevice::major_device_class_to_string(major)
+            "Major: {major:?}",
+            // ClassOfDevice::major_device_class_to_string(major)
         )?;
         write!(
             f,
@@ -173,7 +174,7 @@ impl Display for ClassOfDevice {
 
 impl Debug for ClassOfDevice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
         // f.debug_struct("ClassOfDevice").field("value", &self.value).finish()
     }
 }
@@ -186,7 +187,7 @@ pub enum DeviceProperty {
     Eir(Vec<u8>),
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ScannedDevice {
     pub address: BDAddr,
     pub class: Option<ClassOfDevice>,
@@ -215,8 +216,8 @@ impl ScannedDevice {
                 break;
             }
             index += 1;
-            let t_val = eir[index] as u8;
-            let t: Option<CommonDataType> = FromPrimitive::from_u8(eir[index] as u8);
+            let t_val = eir[index];
+            let t: Option<CommonDataType> = FromPrimitive::from_u8(eir[index]);
             let record_start = index;
 
             if let Some(typ) = t {
@@ -294,17 +295,17 @@ impl Debug for ScannedDevice {
         write!(f, "Address: {} ", bdaddr_to_string(self.address))?;
 
         if let Some(class) = &self.class {
-            write!(f, "Class: {} ", class)?;
+            write!(f, "Class: {class} ")?;
         }
 
         if let Some(name) = &self.name {
-            write!(f, "Name: {} ", name)?;
+            write!(f, "Name: {name} ")?;
         }
 
         if let Some(uuids) = &self.complete_16_bit_service_class_uuids {
             write!(f, "Complete 16 bit UUIDS: [")?;
             for uuid in uuids {
-                write!(f, "{:04x} ", uuid)?;
+                write!(f, "{uuid:04x} ")?;
             }
             write!(f, "] ")?;
         }

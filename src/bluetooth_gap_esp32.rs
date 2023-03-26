@@ -24,12 +24,9 @@ use esp_idf_sys::{
     esp_bt_pin_code_t, esp_bt_status_t_ESP_BT_STATUS_HCI_SUCCESS,
     esp_bt_status_t_ESP_BT_STATUS_SUCCESS,
 };
-// use num_derive::FromPrimitive;
-// use num_traits::FromPrimitive;
 
 use crate::bluetooth_esp32::ESP32_BLUETOOTH_GLOBALS;
 use crate::bluetooth_gap_hal::{ClassOfDevice, DeviceProperty, ScannedDevice};
-use crate::bluetooth_hal::AsyncCallState;
 
 impl From<*const esp_bt_gap_dev_prop_t> for DeviceProperty {
     fn from(property: *const esp_bt_gap_dev_prop_t) -> Self {
@@ -48,7 +45,7 @@ impl From<*const esp_bt_gap_dev_prop_t> for DeviceProperty {
                     }
 
                     log::info!("name: {}", name);
-                    // let name = from_utf8(slice).unwrap();
+
                     DeviceProperty::Name(name)
                 }
                 esp_bt_gap_dev_prop_type_t_ESP_BT_GAP_DEV_PROP_COD => {
@@ -91,34 +88,25 @@ pub extern "C" fn bt_app_gap_cb(event: esp_bt_gap_cb_event_t, param: *mut esp_bt
                 ));
             }
 
-            // let g = ESP32_BLUETOOTH_GLOBALS.discovery.clone(); // lock().unwrap();
-            // log::info!("Discovery result: Globals locked");
-            // let (lock, cvar) = &*g;
-            let discovery = &ESP32_BLUETOOTH_GLOBALS.discovery;
-            let mut result = discovery.result.lock().unwrap();
-            log::info!("Discovery result: List locked");
-            match &mut result.result {
-                None => result.result = Some(vec![scanned_device]),
-                Some(list) => list.push(scanned_device),
-            }
-
-            log::info!("Discovery result: Notifying cvar");
-            discovery.condvar.notify_all();
-        }, // filter_inquiry_scan_result(param),
+            // TODO: Error handling
+            let sender_lock = ESP32_BLUETOOTH_GLOBALS.discovery.lock().unwrap();
+            if let Some((sender, _)) = &*sender_lock {
+                sender.try_broadcast(scanned_device).unwrap();
+            };
+            drop(sender_lock); // ensure we keep it locked as short a time as possible
+        },
         esp_bt_gap_cb_event_t_ESP_BT_GAP_DISC_STATE_CHANGED_EVT => {
             let state = unsafe { (*param).disc_st_chg.state };
             match state {
                 esp_bt_gap_discovery_state_t_ESP_BT_GAP_DISCOVERY_STOPPED => {
                     log::info!("Discovery stopped");
 
-                    let discovery = &ESP32_BLUETOOTH_GLOBALS.discovery;
-                    log::info!("Got discovery from globals");
-                    let mut result = discovery.result.lock().unwrap();
-                    log::info!("Locked discovery result");
-
-                    result.state = AsyncCallState::Finished;
-                    discovery.condvar.notify_all();
-                    log::info!("Notified discovery cancelled");
+                    let mut sender_lock = ESP32_BLUETOOTH_GLOBALS.discovery.lock().unwrap();
+                    if let Some((sender, _)) = &*sender_lock {
+                        sender.close();
+                        log::info!("bt_app_gap_cb: discovery stopped, removing sender ");
+                        sender_lock.take(); // = None;
+                    }
                 }
                 esp_bt_gap_discovery_state_t_ESP_BT_GAP_DISCOVERY_STARTED => {
                     log::info!("GAP Discovery started.");
@@ -130,19 +118,15 @@ pub extern "C" fn bt_app_gap_cb(event: esp_bt_gap_cb_event_t, param: *mut esp_bt
             // ACL connection complete status event
             unsafe {
                 let status = (*param).acl_conn_cmpl_stat;
-                let connection = &ESP32_BLUETOOTH_GLOBALS.connection;
-                let result = &mut connection.result.lock().unwrap();
 
-                result.result = Some(
-                    #[allow(non_upper_case_globals)]
-                    match status.stat {
-                        esp_bt_status_t_ESP_BT_STATUS_SUCCESS
-                        | esp_bt_status_t_ESP_BT_STATUS_HCI_SUCCESS => Ok(()),
-                        _ => Err(anyhow!(format!("Status is {}", status.stat))),
-                    },
-                );
-                result.state = AsyncCallState::Finished;
-                connection.condvar.notify_all();
+                let result = #[allow(non_upper_case_globals)]
+                match status.stat {
+                    esp_bt_status_t_ESP_BT_STATUS_SUCCESS
+                    | esp_bt_status_t_ESP_BT_STATUS_HCI_SUCCESS => Ok(()),
+                    _ => Err(anyhow!(format!("Status is {}", status.stat))),
+                };
+                ESP32_BLUETOOTH_GLOBALS.connection.complete(result);
+
                 log::info!(
                     "Connection status = {}, handle={}",
                     status.stat,

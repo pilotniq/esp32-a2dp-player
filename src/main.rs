@@ -1,16 +1,13 @@
-// #![feature(async_fn_in_trait)]
 #![feature(stmt_expr_attributes)]
 use anyhow::Result;
+use bluetooth_gap_hal::ScannedDevice;
+use esp_idf_sys as _;
 use futures::executor::block_on;
 use std::time;
 use sysinfo::{RefreshKind, System, SystemExt};
-// use esp_idf_hal::prelude::*;
-use esp_idf_sys as _;
 
 use crate::{
-    bluetooth_esp32::ESP32Bluetooth,
-    bluetooth_hal::{AsyncCallState, Bluetooth},
-    uuids::Bluetooth16bitUUIDEnum,
+    bluetooth_esp32::ESP32Bluetooth, bluetooth_hal::Bluetooth, uuids::Bluetooth16bitUUIDEnum,
 }; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
    // use log::info;
 
@@ -48,7 +45,6 @@ fn main() -> Result<()> {
     let mut esp32 = esp32::Esp32::new();
     esp32.init();
 
-    // let kind = ;
     let kind2 = RefreshKind::new().with_memory();
     let mut system = System::new_with_specifics(kind2);
 
@@ -72,81 +68,61 @@ fn main() -> Result<()> {
 
     log::info!("Starting scanning");
     print_memory(&mut system);
-    /*
-       let pair = Arc::new((Mutex::new(vec![]), Condvar::new()));
-       let pair2 = Arc::clone(&pair);
-    */
-    let discovery = &*bluetooth.gap_start_discovery().unwrap();
 
-    let mut result = discovery.result.lock().unwrap();
-    log::info!("Discovery list locked");
-    let mut found = false;
-    let mut device = None;
+    block_on(start(&mut bluetooth))?;
 
-    while !found && result.state == AsyncCallState::InProgress {
-        log::info!("Waiting for discovery");
-        result = discovery.condvar.wait(result).unwrap();
-        log::info!("Got discovery");
-        if let Some(list) = &mut result.result {
-            device = list.pop()
-        }
-        log::info!("Device is {:?}", device);
-        // device = result.result.unwrap().pop();
-        // let d2 = device.take().unwrap();
-
-        if device
-            .as_ref()
-            .unwrap()
-            .has_16bit_uuid(Bluetooth16bitUUIDEnum::AdvancedAudioDistribution as u16)
-        {
-            found = true;
-            log::info!("Found A2DP device")
-        } else {
-            log::info!("Ignoring device" /* device.unwrap().name.take().unwrap() */);
-        }
-    }
-    drop(result); // must unlock list here
-
-    match device {
-        Some(dev) => {
-            // async {
-            log::info!("Device is {}", &dev.name.unwrap());
-            log::info!("Cancelling discovery");
-            block_on(bluetooth.gap_cancel_discovery())?;
-            print_memory(&mut system);
-
-            log::info!("Discovery cancelled, connecting...");
-            block_on(bluetooth.a2dp_connect(&dev.address))?;
-
-            log::info!("Connected!");
-            print_memory(&mut system);
-
-            block_on(audio::playback_task(&mut bluetooth))?;
-
-            // Ok(())
-            // };
-        }
-        None => log::info!("Bluetooth search timed out"),
-    };
-
-    /*
-    drop(bluetooth);
-
-    let _playback_thread = thread::Builder::new()
-        .name("playback_thread".to_owned())
-        .stack_size(4096)
-        .spawn(move || {
-            if let Err(e) = playback_task(state, &bluetooth_mutex) {
-                log::warn!("Error running playback thread {e:?}");
-            }
-        })?;
-        */
     println!("Hello, world!");
 
     std::thread::sleep(ONE_SECOND);
 
     bluetooth.deinit()?;
-    // drop(bluetooth);
 
+    Ok(())
+}
+
+async fn start<'a>(bluetooth: &mut ESP32Bluetooth<'a>) -> Result<()> {
+    let mut discovery = bluetooth.gap_start_discovery()?;
+    let mut found: Option<ScannedDevice> = None;
+
+    while found.is_none() && !discovery.is_closed() {
+        log::info!("Waiting for discovery");
+        match discovery.recv().await {
+            Ok(device) => {
+                log::info!("Device is {:?}", device);
+
+                if device.has_16bit_uuid(Bluetooth16bitUUIDEnum::AdvancedAudioDistribution as u16) {
+                    found.replace(device);
+                    log::info!("Found A2DP device")
+                } else {
+                    log::info!("Ignoring device");
+                }
+            }
+            Err(e) => {
+                if !discovery.is_closed() {
+                    panic!("Error waiting for discovery: {e}");
+                }
+            }
+        } // end of while not found loop
+    }
+
+    match found {
+        Some(dev) => {
+            // async {
+            log::info!("Device is {}", &dev.name.unwrap());
+            log::info!("Cancelling discovery");
+            let cancel_result = bluetooth.gap_cancel_discovery();
+            if let Err(e) = cancel_result {
+                log::info!("Ignoring cancel discovery error {e}");
+            }
+
+            log::info!("Discovery cancelled, connecting...");
+            bluetooth.a2dp_connect(&dev.address).await?;
+
+            log::info!("Connected!");
+
+            audio::playback_task(bluetooth).await?;
+        }
+        None => log::info!("Bluetooth search timed out"),
+    };
     Ok(())
 }

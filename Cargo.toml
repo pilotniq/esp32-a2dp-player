@@ -16,12 +16,14 @@ opt-level = "z"
 pio = ["esp-idf-sys/pio"]
 
 [dependencies]
-esp-idf-sys = { git = "https://github.com/pilotniq/esp-idf-sys", branch = "bluedroid-a2dp", features = [
+esp-idf-sys = { git = "https://github.com/esp-rs/esp-idf-sys", branch = "master", features = [
     "binstart",
 ] }
 
 # esp-idf-svc = { version = "~0.45" }
-esp-idf-svc = { git = "https://github.com/pilotniq/esp-idf-svc", branch = "pilotniq-branches-a2dp" }
+esp-idf-svc = { git = "https://github.com/pilotniq/esp-idf-svc", branch = "pilotniq-branches-a2dp", features = [
+    "nightly",
+] }
 #esp-idf-hal = { version = "~0.40" }
 esp-idf-hal = { git = "https://github.com/pilotniq/esp-idf-hal", branch = "piloting-esp-idf-sys" }
 anyhow = { version = "1.0" }
@@ -35,6 +37,8 @@ futures-locks = "0.7"
 sysinfo = "0.28"
 # librespot-tremor = "0.2"
 librespot-tremor = { git = "https://github.com/pilotniq/librespot-tremor", branch = "xtensa-cross-compile" }
+event-listener = "2.5"
+async-broadcast = "0.5"
 
 [build-dependencies]
 embuild = "0.31"

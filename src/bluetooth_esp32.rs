@@ -1,4 +1,3 @@
-// use std::future::Future;
 use std::ffi::CString;
 use std::sync::Arc;
 
@@ -28,20 +27,25 @@ use anyhow::Result;
 use crate::bluetooth_esp32_a2dp::ESP32A2DP;
 use crate::bluetooth_gap_esp32::bt_app_gap_cb;
 use crate::bluetooth_gap_hal::ScannedDevice;
+use crate::bluetooth_hal::AsyncCall;
 use crate::bluetooth_hal::*;
 use crate::esp32::Esp32;
 
 pub struct Esp32BluetoothGlobals {
-    pub discovery: Arc<AsyncCall<Vec<ScannedDevice>>>,
+    pub discovery: std::sync::Mutex<
+        Option<(
+            async_broadcast::Sender<ScannedDevice>,
+            async_broadcast::Receiver<ScannedDevice>,
+        )>,
+    >,
     pub connection: Arc<AsyncCall<Result<()>>>,
 }
 
 lazy_static! {
-    pub static ref ESP32_BLUETOOTH_GLOBALS: /* Mutex< */ Esp32BluetoothGlobals =
-        Esp32BluetoothGlobals {
-            discovery: Arc::new(AsyncCall::<Vec<ScannedDevice>>::default()),
-            connection: Arc::new(AsyncCall::<Result<()>>::default())
-        };
+    pub static ref ESP32_BLUETOOTH_GLOBALS: Esp32BluetoothGlobals = Esp32BluetoothGlobals {
+        discovery: std::sync::Mutex::new(None),
+        connection: Arc::new(AsyncCall::<Result<()>>::new())
+    };
 }
 
 pub struct ESP32Bluetooth<'a> {
@@ -158,40 +162,49 @@ impl<'a> Bluetooth<'a> for ESP32Bluetooth<'a> {
         Ok(())
     }
 
-    fn gap_start_discovery(&self) -> Result<Arc<AsyncCall<Vec<ScannedDevice>>>> {
+    fn gap_start_discovery(&self) -> Result<async_broadcast::Receiver<ScannedDevice>> {
+        let mut discovery_lock = ESP32_BLUETOOTH_GLOBALS
+            .discovery
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock: {e}"))?;
+
+        if discovery_lock.is_some() {
+            return Err(anyhow::anyhow!("Already scanning"));
+        }
+        let new_channel = async_broadcast::broadcast::<ScannedDevice>(2);
         unsafe {
             esp!(esp_bt_gap_start_discovery(
                 esp_bt_inq_mode_t_ESP_BT_INQ_MODE_GENERAL_INQUIRY,
                 10, /* Duration of discovery, 10 = 10 * 1.28 seconds = 13 seconds */
                 0   /* Number of responses that can be received */
             ))?;
-            let discovery = &mut ESP32_BLUETOOTH_GLOBALS.discovery.result.lock().unwrap();
-
-            discovery.state = AsyncCallState::InProgress;
-
-            Ok(ESP32_BLUETOOTH_GLOBALS.discovery.clone())
         }
+
+        let result_receiver = new_channel.1.clone();
+        log::info!("gap_start_discovery: setting discovery to broadcast channel");
+        discovery_lock.replace(new_channel);
+        drop(discovery_lock);
+
+        Ok(result_receiver)
     }
 
-    async fn gap_cancel_discovery(&self) -> Result<()> {
-        unsafe {
-            esp!(esp_bt_gap_cancel_discovery())?;
-        }
+    fn gap_cancel_discovery(&self) -> Result<()> {
+        let discovery_lock = ESP32_BLUETOOTH_GLOBALS.discovery.lock().unwrap();
 
-        let discovery = &ESP32_BLUETOOTH_GLOBALS.discovery;
-        let mut result = discovery.result.lock().unwrap();
-        log::info!("bluetooth.rs: got discovery");
-        while result.state != AsyncCallState::Finished {
-            log::info!("bluetooth.rs: waiting for discovery change");
-            result = discovery.condvar.wait(result).unwrap();
-            log::info!("bluetooth.rs: after wait");
+        if discovery_lock.is_some() {
+            unsafe {
+                esp!(esp_bt_gap_cancel_discovery())?;
+            }
+
+            // channel will be closed by callback event indicating end of discovery
+
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("No Discovery in progress"))
         }
-        log::info!("bluetooth.rs: after while");
-        Ok(())
     }
 
     async fn a2dp_connect(&mut self, addr: &BDAddr) -> Result<()> {
-        // let a2dp = A2DP.lock().unwrap();
         ESP32A2DP::connect(addr).await
     }
 
@@ -210,9 +223,7 @@ impl<'a> ESP32Bluetooth<'a> {
         ESP32Bluetooth {
             esp32,
             classic,
-            low_energy, // task_thread: None,
-                        // bt_app_tx: None,
-                        // a2dp: ESP32A2DP::new(),
+            low_energy,
         }
     }
 }
