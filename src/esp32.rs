@@ -21,6 +21,10 @@ impl Esp32 {
         esp_idf_sys::link_patches();
 
         esp_idf_svc::log::EspLogger::initialize_default();
+
+        // print chip revision
+        // let revision = efuse_hal_chip_revision();
+        // cargo espflash --boardinfo says the chip revision is 1.
     }
 
     pub fn nvs_init(&mut self) -> Result<()> {

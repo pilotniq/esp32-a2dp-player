@@ -16,11 +16,12 @@ opt-level = "z"
 pio = ["esp-idf-sys/pio"]
 
 [dependencies]
+embedded-io = { git = "https://github.com/ivmarkov/embedded-io" }
+embedded-svc = { version = "0.24", features = ["nightly", "experimental"] }
 esp-idf-sys = { git = "https://github.com/esp-rs/esp-idf-sys", branch = "master", features = [
     "binstart",
 ] }
-
-# esp-idf-svc = { version = "~0.45" }
+#esp-idf-svc = { version = "~0.45" }
 esp-idf-svc = { git = "https://github.com/pilotniq/esp-idf-svc", branch = "pilotniq-branches-a2dp", features = [
     "nightly",
 ] }

@@ -48,8 +48,7 @@ lazy_static! {
     };
 }
 
-pub struct ESP32Bluetooth<'a> {
-    esp32: &'a mut Esp32,
+pub struct ESP32Bluetooth {
     classic: bool,
     low_energy: bool,
 }
@@ -89,16 +88,9 @@ const BT_CONTROLLER_INIT_CONFIG_DEFAULT: esp_bt_controller_config_t = esp_bt_con
 };
 
 #[async_trait]
-impl<'a> Bluetooth<'a> for ESP32Bluetooth<'a> {
+impl<'a> Bluetooth<'a> for ESP32Bluetooth {
     // Requires nvs_flash_init to have been performed first
     fn init(&mut self, device_name: &str) -> Result<()> {
-        // Initialize NVS.
-        // All examples do this, but I have yet to see the docs that say that this needs to be done
-
-        self.esp32.nvs_init()?;
-
-        log::info!("NVS Initialized");
-
         let unused_mode = if !self.classic {
             Some(esp_bt_mode_t_ESP_BT_MODE_CLASSIC_BT)
         } else if !self.low_energy {
@@ -213,17 +205,30 @@ impl<'a> Bluetooth<'a> for ESP32Bluetooth<'a> {
     }
 
     fn deinit(&mut self) -> Result<()> {
-        self.esp32.nvs_deinit()?;
         Ok(())
     }
 }
 
-impl<'a> ESP32Bluetooth<'a> {
-    pub fn new(esp32: &'a mut Esp32, classic: bool, low_energy: bool) -> Self {
+impl ESP32Bluetooth {
+    pub fn new(classic: bool, low_energy: bool) -> Self {
         ESP32Bluetooth {
-            esp32,
             classic,
             low_energy,
         }
+    }
+
+    pub fn pre_init(&self, esp32: &mut Esp32) -> Result<()> {
+        // Initialize NVS.
+        // All examples do this, but I have yet to see the docs that say that this needs to be done
+
+        esp32.nvs_init()?;
+
+        log::info!("NVS Initialized");
+        Ok(())
+    }
+
+    pub fn post_deinit(&self, esp32: &mut Esp32) -> Result<()> {
+        esp32.nvs_deinit()?;
+        Ok(())
     }
 }
